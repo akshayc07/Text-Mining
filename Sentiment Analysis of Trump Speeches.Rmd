@@ -1,0 +1,74 @@
+---
+title: "Sentimental Analysis"
+author: "Akshay Chougule"
+date: "April 5, 2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("readr")
+library("tidyverse")
+library("modelr")
+library("ggplot2")
+library("mlbench")
+library("readr")
+library("tokenizers")
+library("tidytext")
+```
+
+
+
+
+```{r}
+speech<- read_lines("Trump_speech.txt")
+intibble<-tibble(line=1:length(speech),text=speech)
+
+inwords<-intibble%>%unnest_tokens(word,text,token="ngrams",n=2)%>%
+  count(word,sort=TRUE) 
+
+df2<-inwords%>%separate(word,c("word1","word2"),sep=" ")
+df2%>%
+  filter(!word1 %in% c(stop_words$word,"applause")) %>%
+  filter(!word2 %in% c(stop_words$word,"applause"))%>%
+  filter(!word1 %in% c("no","never","without","not"))%>%
+  unite(bigram, word1, word2, sep = " ")%>%
+  top_n(15)%>%
+  ggplot(aes(x=reorder(bigram,n),y=n))+geom_col()+
+  coord_flip()+
+  scale_y_continuous(limits=c(0,801),breaks=seq(0,800,50))
+
+```
+
+```{r}
+library(ggraph)
+df2%>%
+  filter(word1 %in% c("no","never","without","not"))%>%
+  filter(!word2 %in% c(stop_words$word,"applause"))%>%group_by(word1)%>%
+  top_n(5)%>%
+  ggplot(aes(x=reorder(word2,n),y=n))+geom_col()+
+  facet_wrap(~word1,ncol=2,scales="free")+
+  coord_flip()+theme(axis.text.x = element_text(size=10),
+                     axis.text.y = element_text(size=5))+
+  xlab("Word next to Negate words")
+```
+
+
+```{r}
+loughran<-get_sentiments("loughran")
+df22<-df2%>%
+  filter(!word1 %in% c("no","nevr","without","not"))%>%
+  filter(!word2 %in% c(stop_words$word,"applause"))
+df22
+  inner_join(df22,loughran,by=c("word2"="word"))%>%
+    unite(bigram, word1, word2, sep = " ")%>%
+    transmute(sentiment=as.factor(sentiment),bigram,n)%>%
+    mutate(bigram= factor(bigram, levels = rev(unique(bigram))))%>%
+    group_by(sentiment)%>%top_n(5)%>%
+    ggplot(aes(bigram,n, fill = sentiment)) +
+    geom_col(show.legend = FALSE) +
+    labs(x = NULL, y = "number") +
+    facet_wrap(~sentiment, ncol = 2, scales = "free") +coord_flip()+
+    theme(axis.text.x = element_text(size=10),axis.text.y = element_text(size=10))
+   
+```
